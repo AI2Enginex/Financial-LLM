@@ -31,9 +31,7 @@ class ArticleExtractor:
 
             article.download()
             article.parse()
-
             text = article.text
-
             if text:
                 return text[:2000]  # limit for embeddings
 
@@ -105,7 +103,7 @@ class YahooFinanceNewsScraper(FetchNews):
 
                 # Extract full article
                 article_text = self.article_extractor.extract(url)
-
+                
                 # fallback to summary
                 body = article_text if article_text else summary
 
@@ -113,12 +111,14 @@ class YahooFinanceNewsScraper(FetchNews):
                     continue
 
                 page_content = f"""
-                                Title: {title} Publisher: {publisher} Content: {body}
+                              {body}
                                 """
 
                 doc = Document(
                     page_content=page_content.strip(),
                     metadata={
+                        "title": title,
+                        "publisher": publisher,
                         "source": url,
                         "publisher": publisher,
                         "ticker": self.ticker,
