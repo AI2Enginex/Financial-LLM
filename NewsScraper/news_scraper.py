@@ -1,4 +1,5 @@
 import yfinance as yf
+import requests
 from langchain_core.documents import Document
 from datetime import datetime
 from newspaper import Article
@@ -23,17 +24,28 @@ class ArticleExtractor:
     Responsible for extracting article text from a URL
     """
 
+    def __init__(self):
+        self.headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
+
     def extract(self, url: str):
 
         try:
+            # Add headers here
+            response = requests.get(url, headers=self.headers, timeout=10)
+
+            if response.status_code != 200:
+                return None
 
             article = Article(url)
-
-            article.download()
+            article.set_html(response.text)  # use fetched HTML
             article.parse()
+
             text = article.text
+
             if text:
-                return text[:2000]  # limit for embeddings
+                return text  # limit for embeddings
 
         except Exception as e:
             print(f"Article extraction failed: {e}")
@@ -138,7 +150,7 @@ class YahooFinanceNewsScraper(FetchNews):
 
 if __name__ == "__main__":
 
-    news_scraper = YahooFinanceNewsScraper("TCS.NS")
+    news_scraper = YahooFinanceNewsScraper("INFY.NS")
 
     news_documents = news_scraper.get_news_documents()
 
