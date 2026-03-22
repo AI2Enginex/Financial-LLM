@@ -1,132 +1,50 @@
+from GetData.statements_processor import FinancialStatementProcessor
 from GetData.financial_data import FetchFinancialData
 from LLMUtils.VectoreStore import Vectors
 
-from langchain_core.documents import Document
 
-class FinancialDocumentProcessor:
-
-    def __init__(self, company_name, financial_statements, financial_ratios):
-        self.company_name = company_name
-        self.financial_statements = financial_statements
-        self.financial_ratios = financial_ratios
-
-
-    def convert_statements(self):
-        documents = []
-
-        try:
-            for statement in self.financial_statements:
-
-                statement_name = statement.get("statement", "Unknown Statement")
-                data = statement.get("Data", {})
-
-                for period, values in data.items():
-
-                    text = f"{statement_name} for {period}: "
-
-                    for key, value in values.items():
-                        text += f"{key}: {value} "
-
-                    doc = Document(
-                        page_content=text.strip(),
-                        metadata={
-                            "company": self.company_name,
-                            "statement": statement_name,
-                            "period": period
-                        }
-                    )
-
-                    documents.append(doc)
-
-        except Exception as e:
-            print(f"Error processing financial statements: {e}")
-
-        return documents
-
-
-    def convert_ratios(self):
-        documents = []
-
-        try:
-            ratio_data = self.financial_ratios.get("data", {})
-
-            for ratio_name, value in ratio_data.items():
-
-                text = f"{ratio_name} for {self.company_name}: {value}"
-
-                doc = Document(
-                    page_content=text,
-                    metadata={
-                        "company": self.company_name,
-                        "statement": "Financial Ratio",
-                        "ratio": ratio_name
-                    }
-                )
-
-                documents.append(doc)
-
-        except Exception as e:
-            print(f"Error processing financial ratios: {e}")
-
-        return documents
-
-
-    def convert_all(self):
-
-        try:
-            statement_docs = self.convert_statements()
-            ratio_docs = self.convert_ratios()
-
-            return statement_docs + ratio_docs
-
-        except Exception as e:
-            print(f"Error combining documents: {e}")
-            return []
-    
 class FinancialPipeline:
 
     def __init__(self, company_name):
         self.company_name = company_name
-        self.financial_statements = None
-        self.financial_ratios = None
-        self.documents = None
-
+        self.financial_statements = []
+        self.financial_ratios = {}
+        self.documents = []
 
     def fetch_data(self):
-
         try:
             finance_data = FetchFinancialData(company_name=self.company_name)
 
-            self.financial_statements = finance_data.get_financial_statements()
-            self.financial_ratios = finance_data.get_financial_ratios()
+            self.financial_statements = finance_data.get_financial_statements() or []
+            self.financial_ratios = finance_data.get_financial_ratios() or {}
 
         except Exception as e:
             print(f"Error fetching financial data: {e}")
             self.financial_statements = []
             self.financial_ratios = {}
 
-
-    def process_documents(self):
-
+    def process_documents(self, start: str, end: str, ma_days: int):
         try:
-            processor = FinancialDocumentProcessor(
+            processor = FinancialStatementProcessor(
                 self.company_name,
                 self.financial_statements,
                 self.financial_ratios
             )
 
-            self.documents = processor.convert_all()
+            self.documents = processor.convert_all(
+                start=start,
+                end=end,
+                ma_days=ma_days
+            )
 
         except Exception as e:
             print(f"Error processing documents: {e}")
             self.documents = []
 
-
-    def run(self):
-
+    def run(self, start: str, end: str, ma_days: int):
         try:
             self.fetch_data()
-            self.process_documents()
+            self.process_documents(start=start, end=end, ma_days=ma_days)
             return self.documents
 
         except Exception as e:
@@ -134,12 +52,14 @@ class FinancialPipeline:
             return []
         
 
-
 class GenerateVectorsEmbeddings(FinancialPipeline):
 
-    def __init__(self, company_name, config=None):
+    def __init__(self, company_name: str,startdate: str,enddate: str,movingaverage: int, config=None):
 
         self.config = config
+        self.startdate = startdate
+        self.enddate = enddate
+        self.movingaverage = movingaverage
         super().__init__(company_name)
 
     def read_combined_data(self):
@@ -148,7 +68,12 @@ class GenerateVectorsEmbeddings(FinancialPipeline):
 
             pipeline = FinancialPipeline(company_name=self.company_name)
 
-            final_documents = pipeline.run()
+            final_documents = pipeline.run(
+               
+                start=self.startdate,
+                end=self.enddate,
+                ma_days=self.movingaverage
+                )
 
             return final_documents
 
@@ -174,7 +99,7 @@ class GenerateVectorsEmbeddings(FinancialPipeline):
 
 if __name__ == "__main__":
 
-    from LLMUtils.LLMConfigs import ChatGoogleGENAI, GeminiConfig, api_key
+    from LLMUtils.LLMConfigs import GeminiConfig, api_key
     config = GeminiConfig(
         chat_model_name="gemini-3-flash-preview",
         embedding_model_name="sentence-transformers/all-MiniLM-L6-v2",
@@ -186,6 +111,6 @@ if __name__ == "__main__":
         api_key=api_key
     )
 
-    g = GenerateVectorsEmbeddings(company_name='TCS',config=config)
+    g = GenerateVectorsEmbeddings(company_name='TCS',startdate='2025-01-01',enddate='2026-01-01',movingaverage=10,config=config)
     data = g.create_text_vectors()
     print(data)
