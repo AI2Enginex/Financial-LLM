@@ -1,11 +1,13 @@
 import numpy as np
 # Allows for further data manipulation and analysis
 import pandas as pd
+from langchain_core.documents import Document
+from datetime import datetime, timedelta
+import json
 
-import plotly.graph_objects as go
 import yfinance as yf  # Reads stock data
 
-import datetime as dt  # For defining dates
+
 
 def daily_return(dataframe=None, timeframe=None, feature=None):
     """
@@ -433,49 +435,153 @@ class MovinAverageAnalysis:
             return e
 
 
-if __name__ == "__main__":
+# Class for Creating Dcouments for Technicals 
+class TechnicalsDocumentBuilder:
+    
+    def __init__(self, chunk_size: int):
+        self.chunk_size = chunk_size  # creating a group of 10 dates to be 
+                                      # placed together in a single document
+    
+    # Clean the Data before processing 
+    def _clean_dataframe(self, df: pd.DataFrame):
+        try:
+            df = df.copy()
+            df = df.fillna("N/A")
+            df.index = df.index.astype(str)
+            return df
+        except Exception as e:
+            print(f"Error while processing DataFrame: {str(e)}")
     
 
-    def compute_all_technicals(ticker="TCS"):
-        reader = ReadData(start="2025-01-01", end="2026-01-01")
+    # Splitting data into chunks for efficient processing
+    def _chunk_dataframe(self, df: pd.DataFrame):
+        try:
+            chunks = list()
+            for i in range(0, len(df), self.chunk_size):
+                chunks.append(df.iloc[i:i + self.chunk_size])
+            return chunks
+        except Exception as e:
+            print(f"Error while Creating DataFrame Chunks: {str(e)}")
+
+    
+    # Creating Documents for Technicals and Metrics
+    def create_documents(self, df, metrics: dict, ticker: str):
+        try:
+            documents = list()
+
+            df = self._clean_dataframe(df)
+            chunks = self._chunk_dataframe(df)
+
+            # Time-series documents
+            for i, chunk in enumerate(chunks):
+                content = json.dumps(chunk.to_dict(orient="index"), indent=2)
+
+                documents.append(
+                    Document(
+                        page_content=content.replace("\n","").replace("   ","").strip(),
+                        metadata={
+                            "type": "time_series",
+                            "ticker": ticker,
+                            "chunk_id": i,
+                            "rows": len(chunk)
+                        }
+                    )
+                )
+
+            # Metrics document
+            safe_metrics = {
+                "avg_return": round(metrics.get("avg_return", 0), 2),
+                "volatility": round(metrics.get("volatility", 0), 2),
+                "VaR": round(metrics.get("VaR", 0), 2),
+                "beta": round(metrics.get("beta", 0), 2)
+                if isinstance(metrics.get("beta"), (int, float)) else "N/A"
+            }
+
+            metrics_content = f"""
+                Average Return: {safe_metrics['avg_return']}
+                ,Volatility: {safe_metrics['volatility']}
+                ,Value at Risk (VaR): {safe_metrics['VaR']}
+                Beta: {safe_metrics['beta']}
+                """
+
+            documents.append(
+                Document(
+                    page_content=metrics_content.strip().replace("\n","").replace("   ",""),
+                    metadata={
+                        "type": "metrics",
+                        "ticker": ticker
+                    }
+                )
+            )
+
+            return documents
+        except Exception as e:
+             print(f"Error while Creating Documents: {str(e)}")
+
+
+# Main Executer function
+# returns a list of documents for Technicals and metrics
+def compute_all_technicals(ticker: str, start_str: str, end_str: str, moving_average_days: int):
+        
+        start_date = datetime.strptime(start_str, "%Y-%m-%d")
+        end_date = datetime.strptime(end_str, "%Y-%m-%d")
+
+        total_days = (end_date - start_date).days
+        print("total days : ",  total_days)
+        reader = ReadData(start=start_str, end=end_str)
         df = reader.read_dataframe(ticker=ticker)
 
-        # RETURNS
+        # Returns
         ret = ReturnAnalysis(feature="Close")
         df = ret.daily_return_analysis(df, 1)
         df = ret.cumalative_return_analysis(df, "daily_return")
-        avg_return = ret.average_return_analysis(df, 252, "daily_return")
+        avg_return = ret.average_return_analysis(df, total_days, "daily_return")
 
-        # VOLATILITY
+        # Volatility
         vol = VolatilityAnalysis(featurename="daily_return")
-        volatility = vol.volatility_std(df, 252)
+        volatility = vol.volatility_std(df, total_days)
         var = vol.volatility_VAR(df, 0.05)
 
-        # MARKET DATA (BETA)
+        # Market data (beta)
         market_df = reader.market_dataframe("NSEI")
         market_df = ret.daily_return_analysis(market_df, 1)
-        beta = vol.beta_analysis(df, market_df)
 
-        # MOVING AVERAGES
+        try:
+            beta = vol.beta_analysis(df, market_df)
+        except Exception:
+            beta = None
+
+        # Moving averages
         ma = MovinAverageAnalysis(df, "Close")
-        df = ma.simple_moving_average(20)
-        df = ma.exponential_moving_average(20)
-        
+        df = ma.simple_moving_average(moving_average_days)
+        df = ma.exponential_moving_average(moving_average_days)
+
         df = df.set_index("Date")
-        
-        cols = [cols for cols in df.columns]
-        df[cols] = df[cols].round(2)
-        return {
-            "dataframe": df,
-            "metrics": {
+
+        # Round values
+        df = df.round(2)
+
+        # Build documents
+        builder = TechnicalsDocumentBuilder(chunk_size=10)
+
+        documents = builder.create_documents(
+            df=df,
+            metrics={
                 "avg_return": avg_return,
                 "volatility": volatility,
                 "VaR": var,
                 "beta": beta
-            }
-        }
-    
-    result = compute_all_technicals("INFY")
+            },
+            ticker=ticker
+        )
 
-    print(result["metrics"])
-    print(result["dataframe"].tail())
+        return documents
+
+
+
+if __name__ == "__main__":
+    
+    # Run
+    docs = compute_all_technicals(ticker="INFY",start_str='2024-01-01',end_str='2026-01-01',moving_average_days=10)
+
+    print(docs)
