@@ -35,7 +35,7 @@ class PromptTemplates:
         - Operating Margin
         - Net Margin
         - ROE
-        - ROCE
+        
 
         Explain what the numbers suggest about operational efficiency.
 

@@ -435,13 +435,14 @@ class MovinAverageAnalysis:
             return e
 
 
-# Class for Creating Dcouments for Technicals 
+# Class for Cleaning and Chunking the DataFrame. Returns a list of Dataframe Chunks 
 class TechnicalsDocumentBuilder:
     
     def __init__(self, chunk_size: int):
         self.chunk_size = chunk_size  # creating a group of 10 dates to be 
                                       # placed together in a single document
-    
+        
+
     # Clean the Data before processing 
     def _clean_dataframe(self, df: pd.DataFrame):
         try:
@@ -463,38 +464,85 @@ class TechnicalsDocumentBuilder:
         except Exception as e:
             print(f"Error while Creating DataFrame Chunks: {str(e)}")
 
+
+# Class to build the time-series DataFrame. Returns a list of Documents.
+class BuildTimeSeries(TechnicalsDocumentBuilder):
     
-    # Creating Documents for Technicals and Metrics
-    def create_documents(self, df, metrics: dict, ticker: str):
+    def __init__(self, df: pd.DataFrame,metrics: dict, ticker: str,chunk: int):
+
+        super().__init__(chunk_size=chunk)
+
+        self.df = df
+        self.metrics = metrics
+        self.ticker=ticker
+        
+       
+    def create_timeseries_documents(self):
         try:
             documents = list()
 
-            df = self._clean_dataframe(df)
-            chunks = self._chunk_dataframe(df)
+            df = self._clean_dataframe(self.df)
 
+            # Normalize data
+            df = df.replace("N/A", None)
+            df.columns = df.columns.str.strip()
+            
+            chunks = self._chunk_dataframe(df)
+          
             # Time-series documents
             for i, chunk in enumerate(chunks):
-                content = json.dumps(chunk.to_dict(orient="index"), indent=2)
+
+                lines = []
+
+                for date, row in chunk.iterrows():
+                    content = " ".join(
+                        f"{key}: {value}" for key, value in row.items()
+                    )
+
+                    text = f"{self.ticker} on {date}: {content}"
+                    lines.append(text)
+
+                final_content = " ".join(lines)
+
+                doc_id_timeseries = f"{self.ticker}_{chunk.index.min()}_{chunk.index.max()}".lower()
 
                 documents.append(
                     Document(
-                        page_content=content.replace("\n","").replace("   ","").strip(),
+                        page_content=final_content,
                         metadata={
+                            "id": doc_id_timeseries,
                             "type": "time_series",
-                            "ticker": ticker,
                             "chunk_id": i,
-                            "rows": len(chunk)
+                            "rows": len(chunk),
                         }
                     )
                 )
 
+            return documents
+
+        except Exception as e:
+            print(f"Error while creating documents: {str(e)}")
+
+# Class to compute the Technical Metrics using the time-series DataFrame. Returns a list of Documents.
+class BuildMetrics(BuildTimeSeries):
+            
+    def __init__(self, df, metrics, ticker,chunk):
+        super().__init__(df, metrics, ticker,chunk)
+            
+    
+    def create_technicals_documents(self):
+
+        try:
+            documents = self.create_timeseries_documents()
+
+            doc_id_metrics=f"{self.ticker}_metrics"
             # Metrics document
             safe_metrics = {
-                "avg_return": round(metrics.get("avg_return", 0), 2),
-                "volatility": round(metrics.get("volatility", 0), 2),
-                "VaR": round(metrics.get("VaR", 0), 2),
-                "beta": round(metrics.get("beta", 0), 2)
-                if isinstance(metrics.get("beta"), (int, float)) else "N/A"
+                "avg_return": round(self.metrics.get("avg_return", 0), 2),
+                "volatility": round(self.metrics.get("volatility", 0), 2),
+                "VaR": round(self.metrics.get("VaR", 0), 2),
+                "beta": round(self.metrics.get("beta", 0), 2)
+                if isinstance(self.metrics.get("beta"), (int, float)) else "N/A"
             }
 
             metrics_content = f"""
@@ -503,13 +551,14 @@ class TechnicalsDocumentBuilder:
                 ,Value at Risk (VaR): {safe_metrics['VaR']}
                 Beta: {safe_metrics['beta']}
                 """
-
+            
+            
             documents.append(
                 Document(
                     page_content=metrics_content.strip().replace("\n","").replace("   ",""),
                     metadata={
+                        "id": doc_id_metrics,
                         "type": "metrics",
-                        "ticker": ticker
                     }
                 )
             )
@@ -519,8 +568,21 @@ class TechnicalsDocumentBuilder:
              print(f"Error while Creating Documents: {str(e)}")
 
 
-# Main Executer function
-# returns a list of documents for Technicals and metrics
+# Class to Retunn a list of documents for time-seris and metrics
+class BuildTechnicals(BuildMetrics):
+
+    def __init__(self, df, metrics, ticker, chunk):
+        super().__init__(df, metrics, ticker, chunk)
+    
+    def combined_data(self):
+
+        try:
+            return self.create_technicals_documents()
+        except Exception as e:
+            return e
+        
+    
+# Main Executer function that returns a list of documents for Technicals and metrics
 def compute_all_technicals(ticker: str, start_str: str, end_str: str, moving_average_days: int):
         
         start_date = datetime.strptime(start_str, "%Y-%m-%d")
@@ -560,20 +622,19 @@ def compute_all_technicals(ticker: str, start_str: str, end_str: str, moving_ave
 
         # Round values
         df = df.round(2)
-
+        print(df)
         # Build documents
-        builder = TechnicalsDocumentBuilder(chunk_size=10)
-
-        documents = builder.create_documents(
-            df=df,
+        builder = BuildTechnicals(df=df,
             metrics={
                 "avg_return": avg_return,
                 "volatility": volatility,
                 "VaR": var,
                 "beta": beta
             },
-            ticker=ticker
-        )
+            ticker=ticker,
+            chunk=10)
+
+        documents = builder.combined_data()
 
         return documents
 

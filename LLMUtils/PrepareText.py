@@ -1,8 +1,8 @@
-from GetData.statements_processor import FinancialStatementProcessor
+from GetData.statements_processor import FinancialStatementProcesser
 from GetData.financial_data import FetchFinancialData
 from LLMUtils.VectoreStore import Vectors
 
-
+# Class for Fetching and Processing all the Statements and Technicals
 class FinancialPipeline:
 
     def __init__(self, company_name):
@@ -10,7 +10,8 @@ class FinancialPipeline:
         self.financial_statements = []
         self.financial_ratios = {}
         self.documents = []
-
+    
+    # Method to fecth and process the Financial Statements
     def fetch_data(self):
         try:
             finance_data = FetchFinancialData(company_name=self.company_name)
@@ -22,10 +23,11 @@ class FinancialPipeline:
             print(f"Error fetching financial data: {e}")
             self.financial_statements = []
             self.financial_ratios = {}
-
+    
+    # Method to combine all the Statements and Technicals into a one single Document.
     def process_documents(self, start: str, end: str, ma_days: int):
         try:
-            processor = FinancialStatementProcessor(
+            processor = FinancialStatementProcesser(
                 self.company_name,
                 self.financial_statements,
                 self.financial_ratios
@@ -40,7 +42,8 @@ class FinancialPipeline:
         except Exception as e:
             print(f"Error processing documents: {e}")
             self.documents = []
-
+    
+    # Method to return processed documents
     def run(self, start: str, end: str, ma_days: int):
         try:
             self.fetch_data()
@@ -52,6 +55,7 @@ class FinancialPipeline:
             return []
         
 
+# Class for Generating the Embeddings for the Combined Documents and storing them on the Pinecone Index
 class GenerateVectorsEmbeddings(FinancialPipeline):
 
     def __init__(self, company_name: str,startdate: str,enddate: str,movingaverage: int, config=None):
@@ -61,7 +65,8 @@ class GenerateVectorsEmbeddings(FinancialPipeline):
         self.enddate = enddate
         self.movingaverage = movingaverage
         super().__init__(company_name)
-
+    
+    # Fetch the Combined data
     def read_combined_data(self):
 
         try:
@@ -74,19 +79,20 @@ class GenerateVectorsEmbeddings(FinancialPipeline):
                 end=self.enddate,
                 ma_days=self.movingaverage
                 )
-
+            
+            print("final documents :", final_documents)
             return final_documents
 
         except Exception as e:
             print(f"Fatal error: {e}")
 
-
-    def create_text_vectors(self):
+    # Method to generate embeddings and upsert them to the pinecone index
+    def create_text_vectors(self,id: int, batch: int):
 
         Vectors.initialize(config=self.config)
 
         vectors = Vectors.generate_vectors_from_documents(
-            chunks=self.read_combined_data()
+            chunks=self.read_combined_data(),user_id=id, batch_size=batch, ticker=self.company_name
         )
 
         if vectors:
@@ -111,6 +117,6 @@ if __name__ == "__main__":
         api_key=api_key
     )
 
-    g = GenerateVectorsEmbeddings(company_name='TCS',startdate='2025-01-01',enddate='2026-01-01',movingaverage=10,config=config)
-    data = g.create_text_vectors()
+    g = GenerateVectorsEmbeddings(company_name='INFY',startdate='2025-01-01',enddate='2026-01-01',movingaverage=10,config=config)
+    data = g.create_text_vectors(id=21, batch=10)
     print(data)
