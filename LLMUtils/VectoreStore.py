@@ -1,7 +1,6 @@
-from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone
 from LLMUtils.LLMConfigs import EmbeddingModel
-
+from datetime import datetime
 import os
 from dotenv import load_dotenv
 
@@ -54,17 +53,19 @@ class Vectors:
             if not chunks:
                 print("No chunks provided for vector generation.")
                 return None
-
+            
+            today_str = datetime.today().strftime('%Y-%m-%d')
             for doc in chunks:
                 embedding = cls.embeddings.embed_query(doc.page_content)
             
                 vectors_to_upsert.append((
-                        f"{user_id}_{doc.metadata['id']}",
+                        f"{user_id}_{doc.metadata['id']}_{today_str}",
                         embedding,
                         {
                         **doc.metadata,
                         "user_id": str(user_id),        #add user_id
                         "ticker": ticker,
+                        "last_scraped_date": today_str,
                         "text": doc.page_content        # store actual text
                     }
                     ))

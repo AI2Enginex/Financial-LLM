@@ -1,6 +1,33 @@
 from GetData.statements_processor import FinancialStatementProcesser
 from GetData.financial_data import FetchFinancialData
 from LLMUtils.VectoreStore import Vectors
+from langchain_pinecone import PineconeVectorStore
+from pinecone import Pinecone
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+import os
+from dotenv import load_dotenv
+
+
+load_dotenv()
+index_name = os.getenv("INDEX_NAME")
+pinecone_api = os.getenv("PINECONE_API")
+
+def create_timeframe():
+
+    try:
+        enddate = datetime.today()
+        startdate = enddate - relativedelta(years=1)
+
+        startdate_str = startdate.strftime('%Y-%m-%d')
+        enddate_str = enddate.strftime('%Y-%m-%d')
+
+        return startdate_str, enddate_str
+
+    except Exception as e:
+        return e
+    
+
 
 # Class for Fetching and Processing all the Statements and Technicals
 class FinancialPipeline:
@@ -102,6 +129,140 @@ class GenerateVectorsEmbeddings(FinancialPipeline):
 
         return vectors
 
+# Responsible for ingesting data into The VectoreStore and retrieving data from the Pinecone index.
+class PineconeManager:
+
+
+    def __init__(self, config=None):
+
+
+        try:
+            self.pc = Pinecone(api_key=pinecone_api)
+            self.index_name = index_name
+            self.index = self.pc.Index(index_name)
+            self.config = config
+            self.embedding_model = Vectors.initialize(config=self.config)
+
+        except Exception as e:
+            print(f"[Pinecone] Init error: {e}")
+    
+    # loading the Pinecone VectorStore
+    def load_vector_store(self):
+
+        try:
+            return PineconeVectorStore(
+                index=self.index,
+                embedding=self.embedding_model,
+                namespace="__default__"
+            )
+        except Exception as e:
+            print(f"[Pinecone] Error loading vector store: {e}")
+            return None
+        
+    # Method to read the current Date
+    def _get_today(self):
+        return datetime.today().strftime('%Y-%m-%d')
+
+    # Method for building a query vector
+    def _build_query_vector(self, ticker: str):
+        return self.embedding_model.embed_query(f"{ticker}")
+
+    # Method for Validating the data Freshness. New Values are Scraped
+    # after a week from the last Scraped Date.
+    def _check_data_freshness(self, user_id: int, ticker: str):
+
+        try:
+
+            today = self._get_today()
+            today = datetime.strptime(today, "%Y-%m-%d").date()
+
+            results = self.index.query(
+                vector=self._build_query_vector(ticker),
+                top_k=3,
+                include_metadata=True,
+                filter={
+                    "user_id": str(user_id),
+                    "ticker": ticker
+                }
+            )
+
+            if not results.get("matches"):
+                return False  # no data → must ingest
+
+            for match in results["matches"]:
+                last_date_str = match["metadata"].get("last_scraped_date")
+
+                if last_date_str:
+                    last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
+
+                    # check 7-day condition
+                    days_diff = (today - last_date).days
+                    print("Days Remaining : ",days_diff)
+                    if days_diff < 7:
+                        return True  # still valid
+
+            return False  # stale → ingest
+
+
+        except Exception as e:
+            print(f"[Freshness Check Error]: {e}")
+            return False
+    
+    # Method to ingest data into the pinecone vectorstore 
+    def _ingest_data(self, ticker: str, user_id: int, batchsize: int):
+        start, end = create_timeframe()
+
+        print(f"Start Date : {start} and End Date : {end}")
+
+        g = GenerateVectorsEmbeddings(
+            company_name=ticker,
+            startdate=start,
+            enddate=end,
+            movingaverage=10,
+            config=self.config
+        )
+
+        g.create_text_vectors(id=user_id, batch=batchsize)
+
+    # Method for Returning the retriever. Filtered with intended user id and ticker
+    def _get_retriever(self, vector_store, user_id: int, ticker: str, k: int):
+        return vector_store.as_retriever(
+            search_kwargs={
+                "k": k,
+                "filter": {
+                    "user_id": str(user_id),
+                    "ticker": ticker
+                }
+            }
+        )
+
+    # Main method to Fetch the Embeddings from the Vectorstore.
+    # Always Ingest first if the Conditions do not satisfy else Retrieve
+    def fetch_embeddings(self, ticker_name: str, userid: int, batchsize: int, k: int):
+
+        try:
+            vector_store = self.load_vector_store()
+
+            is_fresh = self._check_data_freshness(userid, ticker_name)
+
+            print("status : ", is_fresh)
+            print("today : ", self._get_today())
+
+            if is_fresh:
+                print("Using existing data")
+                return self._get_retriever(vector_store, userid, ticker_name, k)
+
+            print("Ingesting new data...")
+
+            self._ingest_data(ticker_name, userid, batchsize)
+
+            return self._get_retriever(vector_store, userid, ticker_name, k)
+
+        except Exception as e:
+            print(f"Error retrieving the Embeddings {e}")
+            return e
+
+
 
 if __name__ == "__main__":
 
@@ -117,6 +278,6 @@ if __name__ == "__main__":
         api_key=api_key
     )
 
-    g = GenerateVectorsEmbeddings(company_name='INFY',startdate='2025-01-01',enddate='2026-01-01',movingaverage=10,config=config)
-    data = g.create_text_vectors(id=21, batch=10)
+    g = PineconeManager(config=config)
+    data = g.fetch_embeddings(ticker_name='RELIANCE',userid=20, batchsize=10,k=1000)
     print(data)
