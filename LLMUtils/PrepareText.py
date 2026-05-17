@@ -52,7 +52,7 @@ class FinancialPipeline:
             self.financial_ratios = {}
     
     # Method to combine all the Statements and Technicals into a one single Document.
-    def process_documents(self, start: str, end: str, ma_days: int):
+    def process_documents(self, start: str, end: str, fast_ma: int, slow_ma: int, fast_ema: int,slow_ema: int):
         try:
             processor = FinancialStatementProcesser(
                 self.company_name,
@@ -63,7 +63,10 @@ class FinancialPipeline:
             self.documents = processor.convert_all(
                 start=start,
                 end=end,
-                ma_days=ma_days
+                slow_ma=slow_ma,
+                fast_ma=fast_ma,
+                slow_ema=slow_ema,
+                fast_ema=fast_ema
             )
 
         except Exception as e:
@@ -71,10 +74,10 @@ class FinancialPipeline:
             self.documents = []
     
     # Method to return processed documents
-    def run(self, start: str, end: str, ma_days: int):
+    def run(self, start: str, end: str, slow_ma: int, fast_ma: int, slow_ema: int, fast_ema: int):
         try:
             self.fetch_data()
-            self.process_documents(start=start, end=end, ma_days=ma_days)
+            self.process_documents(start=start, end=end, slow_ma=slow_ma, fast_ma=fast_ma, slow_ema=slow_ema, fast_ema=fast_ema)
             return self.documents
 
         except Exception as e:
@@ -85,12 +88,12 @@ class FinancialPipeline:
 # Class for Generating the Embeddings for the Combined Documents and storing them on the Pinecone Index
 class GenerateVectorsEmbeddings(FinancialPipeline):
 
-    def __init__(self, company_name: str,startdate: str,enddate: str,movingaverage: int, config=None):
+    def __init__(self, company_name: str,startdate: str,enddate: str, config=None):
 
         self.config = config
         self.startdate = startdate
         self.enddate = enddate
-        self.movingaverage = movingaverage
+        
         super().__init__(company_name)
     
     # Fetch the Combined data
@@ -104,7 +107,10 @@ class GenerateVectorsEmbeddings(FinancialPipeline):
                
                 start=self.startdate,
                 end=self.enddate,
-                ma_days=self.movingaverage
+                slow_ma=100,
+                fast_ma=50,
+                slow_ema=21,
+                fast_ema=7
                 )
             
             print("final documents :", final_documents)
@@ -166,6 +172,15 @@ class PineconeManager:
     # Method for building a query vector
     def _build_query_vector(self, ticker: str):
         return self.embedding_model.embed_query(f"{ticker}")
+    
+    def _delete_existing_data(self, user_id: int, ticker: str):
+        self.index.delete(
+            filter={
+                "user_id": str(user_id),
+                "ticker": ticker
+            }
+        )
+
 
     # Method for Validating the data Freshness. New Values are Scraped
     # after a week from the last Scraped Date.
@@ -187,21 +202,26 @@ class PineconeManager:
             )
 
             if not results.get("matches"):
+
+                print("No data found...Inserting new")
                 return False  # no data → must ingest
 
             for match in results["matches"]:
                 last_date_str = match["metadata"].get("last_scraped_date")
-
+                
+                print("last date of scraping : ",last_date_str)
                 if last_date_str:
                     last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
 
                     # check 7-day condition
                     days_diff = (today - last_date).days
-                    print("Days Remaining : ",days_diff)
+                    print("Days Difference : ",days_diff)
                     if days_diff < 7:
                         return True  # still valid
-
-            return False  # stale → ingest
+                    
+            print("Deleting Existing data......")
+            self._delete_existing_data(user_id=user_id, ticker=ticker)
+            return False 
 
 
         except Exception as e:
@@ -218,7 +238,6 @@ class PineconeManager:
             company_name=ticker,
             startdate=start,
             enddate=end,
-            movingaverage=10,
             config=self.config
         )
 
@@ -279,5 +298,5 @@ if __name__ == "__main__":
     )
 
     g = PineconeManager(config=config)
-    data = g.fetch_embeddings(ticker_name='RELIANCE',userid=20, batchsize=10,k=1000)
+    data = g.fetch_embeddings(ticker_name='TCS',userid=21, batchsize=10,k=100)
     print(data)

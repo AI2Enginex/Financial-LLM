@@ -402,7 +402,7 @@ class MovinAverageAnalysis:
         try:
             # Calculate the Simple Moving Average
             self.dataframe['SIMPLE_MA_' +
-                    str(windowsize)] = self.dataframe[self.feature].rolling(windowsize).mean()
+                    str(windowsize) + '_' + self.feature] = self.dataframe[self.feature].rolling(windowsize).mean()
             return self.dataframe
         except Exception as e:
             # If an error occurs during calculation, return the error message
@@ -427,7 +427,7 @@ class MovinAverageAnalysis:
         """
         try:
             # Calculate the Exponential Moving Average
-            self.dataframe['EXPONENTIAL_MA_' + str(windowsize)] = self.dataframe[self.feature].ewm(
+            self.dataframe['EXPONENTIAL_MA_' + str(windowsize) + '_' + self.feature] = self.dataframe[self.feature].ewm(
                 span=windowsize, adjust=False, min_periods=windowsize).mean()
             return self.dataframe
         except Exception as e:
@@ -541,15 +541,13 @@ class BuildMetrics(BuildTimeSeries):
                 "avg_return": round(self.metrics.get("avg_return", 0), 2),
                 "volatility": round(self.metrics.get("volatility", 0), 2),
                 "VaR": round(self.metrics.get("VaR", 0), 2),
-                "beta": round(self.metrics.get("beta", 0), 2)
-                if isinstance(self.metrics.get("beta"), (int, float)) else "N/A"
+                
             }
 
             metrics_content = f"""
                 Average Return: {safe_metrics['avg_return']}
                 ,Volatility: {safe_metrics['volatility']}
                 ,Value at Risk (VaR): {safe_metrics['VaR']}
-                Beta: {safe_metrics['beta']}
                 """
             
             
@@ -583,7 +581,9 @@ class BuildTechnicals(BuildMetrics):
         
     
 # Main Executer function that returns a list of documents for Technicals and metrics
-def compute_all_technicals(ticker: str, start_str: str, end_str: str, moving_average_days: int):
+def compute_all_technicals(ticker: str, start_str: str, end_str: str, 
+                           simple_moving_average_fast: int, simple_moving_average_slow: int,
+                           exponential_moving_average_fast: int, exponential_moving_average_slow: int,):
         
         start_date = datetime.strptime(start_str, "%Y-%m-%d")
         end_date = datetime.strptime(end_str, "%Y-%m-%d")
@@ -605,31 +605,40 @@ def compute_all_technicals(ticker: str, start_str: str, end_str: str, moving_ave
         var = vol.volatility_VAR(df, 0.05)
 
         # Market data (beta)
-        market_df = reader.market_dataframe("NSEI")
-        market_df = ret.daily_return_analysis(market_df, 1)
+        # market_df = reader.market_dataframe("NSEI")
+        # market_df = ret.daily_return_analysis(market_df, 1)
 
-        try:
-            beta = vol.beta_analysis(df, market_df)
-        except Exception:
-            beta = None
+        # try:
+        #     beta = vol.beta_analysis(df, market_df)
+        #     print("Beta: ", beta)
+        # except Exception as e:
+
+        #     print("Error: ",e)
+        #     beta = None
 
         # Moving averages
         ma = MovinAverageAnalysis(df, "Close")
-        df = ma.simple_moving_average(moving_average_days)
-        df = ma.exponential_moving_average(moving_average_days)
+        df = ma.simple_moving_average(simple_moving_average_fast)
+        df = ma.simple_moving_average(simple_moving_average_slow)
+
+        
+        df = ma.exponential_moving_average(exponential_moving_average_fast)
+        df = ma.exponential_moving_average(exponential_moving_average_slow)
 
         df = df.set_index("Date")
 
+        volume_ma = MovinAverageAnalysis(df, "Volume")
+        df = volume_ma.simple_moving_average(windowsize=20)  # 20 day moving average for volume
         # Round values
         df = df.round(2)
+        df.to_csv(f"{ticker}_technicals.csv")  # Save the DataFrame to a CSV file for inspection
         print(df)
         # Build documents
         builder = BuildTechnicals(df=df,
             metrics={
                 "avg_return": avg_return,
                 "volatility": volatility,
-                "VaR": var,
-                "beta": beta
+                "VaR": var
             },
             ticker=ticker,
             chunk=10)
@@ -643,6 +652,8 @@ def compute_all_technicals(ticker: str, start_str: str, end_str: str, moving_ave
 if __name__ == "__main__":
     
     # Run
-    docs = compute_all_technicals(ticker="INFY",start_str='2024-01-01',end_str='2026-01-01',moving_average_days=10)
+    docs = compute_all_technicals(ticker="TCS",start_str='2025-05-17',end_str='2026-05-17',
+                                  simple_moving_average_fast=50,simple_moving_average_slow=100,
+                                  exponential_moving_average_fast=7,exponential_moving_average_slow=21)
 
     print(docs)

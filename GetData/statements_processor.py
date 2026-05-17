@@ -101,7 +101,7 @@ class FinancialStatementProcesser(ProcessFinancialRatios):
         super().__init__(company_name, financial_statements, financial_ratios)
 
     # Combining all the Technical Data into one single List of Documents
-    def convert_all(self, start: str, end: str, ma_days: int):
+    def convert_all(self, start: str, end: str, slow_ma: int, fast_ma: int, slow_ema: int, fast_ema: int):
         try:
             
             processed_docs = self.convert_ratios()
@@ -111,7 +111,10 @@ class FinancialStatementProcesser(ProcessFinancialRatios):
                 ticker=self.company_name,
                 start_str=start,
                 end_str=end,
-                moving_average_days=ma_days
+                simple_moving_average_fast=fast_ma,
+                simple_moving_average_slow=slow_ma,
+                exponential_moving_average_fast=fast_ema,
+                exponential_moving_average_slow=slow_ema
             )
             
             # Returning a single string of documents
