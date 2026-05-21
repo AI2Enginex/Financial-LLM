@@ -1,6 +1,6 @@
-from GetData.financial_statements import FetchData
+from Statements.financial_statements import FetchData
 
-from GetData.yahoo_finance_ratios import FinancialRatios
+from GetData.finance_ratios import FinancialRatios
 
 class FetchFinancialData:
     def __init__(self, company_name: str):

@@ -581,7 +581,7 @@ class BuildTechnicals(BuildMetrics):
         
     
 # Main Executer function that returns a list of documents for Technicals and metrics
-def compute_all_technicals(ticker: str, start_str: str, end_str: str, 
+def compute_technicals(ticker: str, start_str: str, end_str: str, 
                            simple_moving_average_fast: int, simple_moving_average_slow: int,
                            exponential_moving_average_fast: int, exponential_moving_average_slow: int,):
         
@@ -652,7 +652,7 @@ def compute_all_technicals(ticker: str, start_str: str, end_str: str,
 if __name__ == "__main__":
     
     # Run
-    docs = compute_all_technicals(ticker="TCS",start_str='2025-05-17',end_str='2026-05-17',
+    docs = compute_technicals(ticker="TCS",start_str='2025-05-17',end_str='2026-05-17',
                                   simple_moving_average_fast=50,simple_moving_average_slow=100,
                                   exponential_moving_average_fast=7,exponential_moving_average_slow=21)
 

@@ -298,5 +298,5 @@ if __name__ == "__main__":
     )
 
     g = PineconeManager(config=config)
-    data = g.fetch_embeddings(ticker_name='TCS',userid=21, batchsize=10,k=100)
+    data = g.fetch_embeddings(ticker_name='INFY',userid=21, batchsize=10,k=100)
     print(data)

@@ -1,4 +1,4 @@
-from GetData.technicals import compute_all_technicals
+from Technicals.technicals import compute_technicals
 from langchain_core.documents import Document
 
 
@@ -107,7 +107,7 @@ class FinancialStatementProcesser(ProcessFinancialRatios):
             processed_docs = self.convert_ratios()
             
             # Computing the technical analysis values
-            technical_docs = compute_all_technicals(
+            technical_docs = compute_technicals(
                 ticker=self.company_name,
                 start_str=start,
                 end_str=end,
