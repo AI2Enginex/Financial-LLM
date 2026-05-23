@@ -1,5 +1,7 @@
-import requests
+
 from typing import Optional, List, Dict
+from urllib.parse import urlparse
+import trafilatura
 import os
 import re
 from dotenv import load_dotenv
@@ -7,6 +9,51 @@ from tavily import TavilyClient
 from ddgs import DDGS
 
 load_dotenv()
+
+BAD_URL_PATTERNS = [
+    "investor-relations",
+    "/about",
+    "/careers",
+    "/contact",
+    "/privacy",
+    "/terms",
+    "/advertisement",
+    "/sponsored"
+]
+
+
+FINANCIAL_KEYWORDS = [
+    "revenue",
+    "profit",
+    "guidance",
+    "margin",
+    "ebitda",
+    "earnings",
+    "shares",
+    "stock",
+    "quarter",
+    "analyst",
+    "target price",
+    "results",
+    "forecast",
+    "deal",
+    "acquisition"
+]
+
+
+NOISE_KEYWORDS = [
+    "about us",
+    "careers",
+    "contact us",
+    "cookie policy",
+    "accessibility",
+    "subscribe",
+    "follow us",
+    "advertisement"
+]
+
+
+
 
 class WebSearchTool:
     """
@@ -68,59 +115,86 @@ class WebSearchTool:
         text = text.strip()
         
         return text
+    
+    def read_content(self, response: dict, total_results: int):
+
+        results = list()
+
+        for item in response.get("results", []):
+
+                title = item.get("title", "")
+                url = item.get("url", "")
+                snippet = item.get("content", "")
+
+                try:
+
+                    downloaded = trafilatura.fetch_url(url)
+
+                    full_text = trafilatura.extract(
+                        downloaded,
+                        include_comments=False,
+                        include_tables=False
+                    )
+
+                except Exception as extraction_error:
+                    print(f"Extraction failed: {extraction_error}")
+                    continue
+
+                # fallback
+                if not full_text:
+                    full_text = snippet
+
+                full_text = self._clean_text(full_text)
+
+                if not full_text:
+                    continue
+
+                lower_text = full_text.lower()
+
+                financial_score = sum(keyword in lower_text for keyword in FINANCIAL_KEYWORDS)
+
+                results.append({
+                    "title": title,
+                    "url": url,
+                    "snippet": snippet,
+                    "content": full_text,
+                    "source": urlparse(url).netloc,
+                    "financial_score": financial_score
+                })
+
+                if len(results) >= total_results:
+                    break
+            
+        return results
         
     def _tavily_search(self, query: str, num_results: int):
-        """
-        Search using Tavily API (recommended - most reliable)
-        Retrieves full text content summaries, filters out images and ads
-        """
-        results = list()
-        unwanted_keywords = ['image', 'photo', 'picture', 'gallery', 'pinterest', 'instagram', 'ad', 'advertisement', 'sponsored']
+
         try:
+
             if not self.tavily_key:
-                print("Tavily API key not found in TAVILY_API_KEY environment variable")
+                print("Tavily API key missing")
                 return []
-                
+
             client = TavilyClient(api_key=self.tavily_key)
+
             response = client.search(
-                query, 
-                max_results=num_results,
-                include_answer=True,
-                include_raw_content=True
+                query=query,
+                search_depth="advanced",
+                max_results=num_results * 3,
+                include_answer=False,
+                include_raw_content=False
             )
-            
-            for result in response.get('results', []):
-                title = result.get('title', '').lower()
-                url = result.get('url', '').lower()
-                
-                if any(keyword in title or keyword in url for keyword in unwanted_keywords):
-                    continue
-                
-                content = result.get('raw_content', '')
-                if not content:
-                    content = result.get('content', '')
-                if not content:
-                    content = result.get('summary', '')
-                if not content:
-                    content = result.get('snippet', '')
-                
-                # Clean the content aggressively
-                content = self._clean_text(content)
-                
-                if content:
-                    results.append({
-                        'title': result.get('title', ''),
-                        'url': result.get('url', ''),
-                        'snippet': content
-                    })
-                    if len(results) >= num_results:
-                        break
-            
-            print(f"Tavily returned {len(results)} text results (filtered)")
+
+            results = self.read_content(response, num_results)
+
+            print(f"total {len(results)} high-quality results")
+
             return results
-            
+
         except Exception as e:
+
             print(f"Tavily search error: {e}")
+
             return []
     
     
@@ -132,46 +206,18 @@ class WebSearchTool:
         """
         try:
             ddgs = DDGS()
-            results = list()
-            unwanted_keywords = ['image', 'photo', 'picture', 'gallery', 'pinterest', 'instagram', 'ad', 'advertisement', 'sponsored']
+            
             
             try:
                 search_results = list(ddgs.text(query, max_results=num_results*2, timelimit='y'))
+
+                results = self.read_content({"results": search_results}, num_results)
+
+                return results
             except Exception as search_error:
                 print(f"DuckDuckGo query error: {search_error}")
-                print(f"Retrying with different parameters...")
-                try:
-                    search_results = list(ddgs.text(query, max_results=num_results*2, backend='lite'))
-                except:
-                    search_results = []
-            
-            if not search_results:
-                print(f"DuckDuckGo returned no results for query")
                 return []
             
-            for result in search_results:
-                if isinstance(result, dict):
-                    title = result.get('title', '').lower()
-                    url = result.get('href', '') or result.get('link', '')
-                    snippet = result.get('body', '') or result.get('snippet', '')
-                    
-                    if any(keyword in title or keyword in url.lower() for keyword in unwanted_keywords):
-                        continue
-                    
-                    # Clean the snippet aggressively
-                    snippet = self._clean_text(snippet)
-                    
-                    if title and url and snippet and len(snippet.strip()) > 50:
-                        results.append({
-                            'title': result.get('title', ''),
-                            'url': url,
-                            'snippet': snippet
-                        })
-                        if len(results) >= num_results:
-                            break
-            
-            print(f"DuckDuckGo returned {len(results)} text results (filtered)")
-            return results
             
         except Exception as e:
             print(f"DuckDuckGo search error: {e}")
@@ -236,11 +282,7 @@ class WebSearchTool:
             
             # Apply additional cleaning to ensure no artifacts remain
             snippet = self._clean_text(snippet)
-            
-            
-            
             snippet = snippet.strip()
-            
             formatted += f"\n{idx}. {title}\n"
             formatted += f"\nURL: {url}\n"
             formatted += f"\nSummary: {snippet}\n"
@@ -251,7 +293,16 @@ class WebSearchTool:
 
 if __name__ == "__main__":
     search_tool = WebSearchTool()
-    ticker = "INFOSYS"
-    query = f"Fetch The latest News for {ticker} from the web"
-    results = search_tool.search(query, num_results=5)
+    ticker = "Reliance Industries"
+    query = f"""
+            Fetch the Latest news about {ticker}.
+            Focus on:
+            - earnings
+            - quarterly results
+            - guidance
+            - stock performance
+            - market sentiment
+
+"""
+    results = search_tool.search(query, num_results=10)
     print(search_tool.format_search_results(results))
