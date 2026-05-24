@@ -135,6 +135,8 @@ class WebSearchTool:
 
             response = client.search(
                 query=query,
+                days=7,
+                topics="news",
                 search_depth="advanced",
                 max_results=num_results * 3,
                 include_answer=False,
@@ -246,7 +248,7 @@ class WebSearchTool:
 
 if __name__ == "__main__":
     search_tool = WebSearchTool()
-    ticker = "IDFC First Bank"
+    ticker = "TATA STEEL"
     query = f"""
             Fetch the Latest news about {ticker}.
             Focus on:
