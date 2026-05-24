@@ -255,7 +255,9 @@ if __name__ == "__main__":
             - guidance
             - stock performance
             - market sentiment
-
+            - analyst ratings
+            - any significant corporate developments
+            - recent news articles
 """
     results = search_tool.search(query, num_results=10)
     print(search_tool.format_search_results(results))
