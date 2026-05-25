@@ -7,10 +7,11 @@ import re
 from dotenv import load_dotenv
 from tavily import TavilyClient
 from ddgs import DDGS
-
+from datetime import datetime
 load_dotenv()
 
-
+now = datetime.now()
+print(f"Current date and time: {now}")
 class WebSearchTool:
     """
     Web search tool for retrieving information when LLM is unable to provide answer
@@ -40,7 +41,7 @@ class WebSearchTool:
             print(f"Using Google Search as search provider")
         else:
             self.provider = "duckduckgo"
-            print(f"Using DuckDuckGo as search provider (free, no API key)")
+            print(f"Using DuckDuckGo as search provider")
     
     def _clean_text(self, text: str):
         """
@@ -79,24 +80,24 @@ class WebSearchTool:
         results = list()
 
         for item in response.get("results", []):
-
+                
+                # Extract title, URL, and snippet from search result item
+                # Use multiple possible keys to maximize compatibility with different search tools.
                 title = item.get("title", "")
-                url = item.get("url", "")
-                snippet = item.get("content", "")
+                url = item.get("url") or item.get("href") or ""
+                snippet = item.get("content") or item.get("body") or item.get("snippet") or ""
+                full_text = ""
 
                 try:
-
-                    downloaded = trafilatura.fetch_url(url)
-
-                    full_text = trafilatura.extract(
-                        downloaded,
-                        include_comments=False,
-                        include_tables=False
-                    )
-
+                    if url:
+                        downloaded = trafilatura.fetch_url(url)
+                        full_text = trafilatura.extract(
+                            downloaded,
+                            include_comments=False,
+                            include_tables=False
+                        )
                 except Exception as extraction_error:
                     print(f"Extraction failed: {extraction_error}")
-                    continue
 
                 # fallback
                 if not full_text:
@@ -135,9 +136,9 @@ class WebSearchTool:
 
             response = client.search(
                 query=query,
-                days=7,
                 topics="news",
                 search_depth="advanced",
+                time_range="month",
                 max_results=num_results * 3,
                 include_answer=False,
                 include_raw_content=False
@@ -164,8 +165,8 @@ class WebSearchTool:
         try:
             ddgs = DDGS()
             try:
-                search_results = list(ddgs.text(query, max_results=num_results*2, timelimit='y'))
-
+                search_results = list(ddgs.text(query, max_results=num_results*2, timelimit='year'))
+                
                 results = self.read_content({"results": search_results}, num_results)
 
                 return results
@@ -207,6 +208,7 @@ class WebSearchTool:
             # Fallback to DuckDuckGo
             print(f"Primary search failed or returned empty. Trying DuckDuckGo fallback...")
             results = self._duckduckgo_search(query, num_results)
+            print(f"DuckDuckGo returned {len(results)} results")
             return results if results else []
             
         except Exception as e:
@@ -248,7 +250,7 @@ class WebSearchTool:
 
 if __name__ == "__main__":
     search_tool = WebSearchTool()
-    ticker = "TATA STEEL"
+    ticker = "TCS"
     query = f"""
             Fetch the Latest news about {ticker}.
             Focus on:
@@ -257,9 +259,7 @@ if __name__ == "__main__":
             - guidance
             - stock performance
             - market sentiment
-            - analyst ratings
-            - any significant corporate developments
-            - recent news articles
+            - analyst opinions
 """
     results = search_tool.search(query, num_results=10)
     print(search_tool.format_search_results(results))
