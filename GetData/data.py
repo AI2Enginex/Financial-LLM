@@ -2,7 +2,7 @@ from Technicals.technicals import compute_technicals
 from langchain_core.documents import Document
 
 # Class for Loading Necessary Variables
-class FinancialStatementVariables:
+class Variables:
 
     def __init__(self, company_name, financial_statements, financial_ratios):
         self.company_name = company_name
@@ -12,7 +12,7 @@ class FinancialStatementVariables:
 
 
 # Class for Reading all the Financial Statements and Returns a List of Documents
-class ProcessFinancialStatements(FinancialStatementVariables):
+class ProcessData(Variables):
 
     def __init__(self, company_name, financial_statements, financial_ratios):
         super().__init__(company_name, financial_statements, financial_ratios)
@@ -56,7 +56,7 @@ class ProcessFinancialStatements(FinancialStatementVariables):
         return documents
     
 # Class for Reading all the Financial Ratios and Returns a List of Documents
-class ProcessFinancialRatios(ProcessFinancialStatements):
+class ProcessFinancialText(ProcessData):
 
     def __init__(self, company_name, financial_statements, financial_ratios):
         super().__init__(company_name, financial_statements, financial_ratios)
@@ -93,7 +93,7 @@ class ProcessFinancialRatios(ProcessFinancialStatements):
         return documents
 
 # Class for Combining the Financial Statements and Technicals. Returns a List of Documents
-class FinancialStatementProcesser(ProcessFinancialRatios):
+class FinancialDataProcesser(ProcessFinancialText):
 
     def __init__(self, company_name, financial_statements, financial_ratios):
         super().__init__(company_name, financial_statements, financial_ratios)

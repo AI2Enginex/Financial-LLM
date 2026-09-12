@@ -1,5 +1,5 @@
-from GetData.technicals import FinancialStatementProcesser
-from GetData.fundamentals import FetchFinancialData
+from GetData.data import FinancialDataProcesser
+from Fundamentals.fundamentals import FetchFinancialData
 from LLMUtils.VectoreStore import Vectors
 from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone
@@ -26,8 +26,6 @@ def create_timeframe():
 
     except Exception as e:
         return e
-    
-
 
 # Class for Fetching and Processing all the Statements and Technicals
 class FinancialPipeline:
@@ -54,7 +52,7 @@ class FinancialPipeline:
     # Method to combine all the Statements and Technicals into a one single Document.
     def process_documents(self, start: str, end: str, fast_ma: int, slow_ma: int, fast_ema: int,slow_ema: int):
         try:
-            processor = FinancialStatementProcesser(
+            processor = FinancialDataProcesser(
                 self.company_name,
                 self.financial_statements,
                 self.financial_ratios
@@ -298,5 +296,5 @@ if __name__ == "__main__":
     )
 
     g = PineconeManager(config=config)
-    data = g.fetch_embeddings(ticker_name='TCS',userid=20, batchsize=10,k=100)
+    data = g.fetch_embeddings(ticker_name='TCS',userid=21, batchsize=10,k=100)
     print(data)
