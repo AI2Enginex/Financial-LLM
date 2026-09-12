@@ -1,5 +1,11 @@
 import yfinance as yf
+"""
 
+Class to fetch and analyze financial ratios for a given stock ticker. This class uses the yfinance library to 
+retrieve stock information and calculates various financial ratios, providing insights into market metrics, valuation, 
+profitability, liquidity, leverage, cash flow, growth, and dividend performance.
+
+"""
 
 class FinancialRatios:
 

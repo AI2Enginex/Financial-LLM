@@ -8,7 +8,10 @@ load_dotenv()
 pinecone_api = os.getenv("PINECONE_API")
 index_name = os.getenv("INDEX_NAME")
 
-# ========================== VECTOR STORE ============================
+"""
+Class to handle vector embeddings and storage in Pinecone. This class initializes the embedding model and Pinecone index, 
+generates vector embeddings from document chunks, and upserts them into the Pinecone index. 
+"""
 
 class Vectors:
     """

@@ -1,7 +1,10 @@
 from langchain_core.prompts import PromptTemplate
 
-# ========================== PROMPT TEMPLATES ============================
-
+"""
+Class to define prompt templates for financial analysis. This class provides a method to generate a structured 
+prompt for analyzing financial data of a company, guiding the user to produce a professional financial analysis 
+report similar to those created by institutional investment analysts. 
+"""
 class PromptTemplates:
 
     @classmethod

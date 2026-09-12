@@ -1,8 +1,6 @@
 from Technicals.technicals import compute_technicals
 from langchain_core.documents import Document
 
-
-
 # Class for Loading Necessary Variables
 class FinancialStatementVariables:
 

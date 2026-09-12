@@ -1,6 +1,12 @@
-from Statements.financial_statements import FetchData
+from Scraper.financial_statements import FetchData
 
-from GetData.finance_ratios import FinancialRatios
+from Ratios.finance_ratios import FinancialRatios
+
+"""
+Class to fetch and analyze financial data for a given company. This class initializes data fetchers for financial statements 
+and ratios, retrieves the data, and provides structured outputs for further analysis.
+
+"""
 
 class FetchFinancialData:
     def __init__(self, company_name: str):

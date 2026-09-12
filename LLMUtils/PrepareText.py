@@ -1,5 +1,5 @@
-from GetData.statements_processor import FinancialStatementProcesser
-from GetData.financial_data import FetchFinancialData
+from GetData.technicals import FinancialStatementProcesser
+from GetData.fundamentals import FetchFinancialData
 from LLMUtils.VectoreStore import Vectors
 from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone
@@ -216,7 +216,7 @@ class PineconeManager:
                     # check 7-day condition
                     days_diff = (today - last_date).days
                     print("Days Difference : ",days_diff)
-                    if days_diff < 7:
+                    if days_diff < 5:
                         return True  # still valid
                     
             print("Deleting Existing data......")
@@ -298,5 +298,5 @@ if __name__ == "__main__":
     )
 
     g = PineconeManager(config=config)
-    data = g.fetch_embeddings(ticker_name='INFY',userid=21, batchsize=10,k=100)
+    data = g.fetch_embeddings(ticker_name='TCS',userid=20, batchsize=10,k=100)
     print(data)
